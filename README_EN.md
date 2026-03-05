@@ -8,7 +8,8 @@
 
 [![Powered by Cloudflare](https://img.shields.io/badge/Powered%20by-Cloudflare-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![License: LGPL-3.0](https://img.shields.io/badge/License-LGPL--3.0-2ea44f)](./LICENSE)
-[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://deploy.workers.cloudflare.com/?url=https://github.com/shuaiplus/NodeWarden)
+[![Deploy (R2)](https://img.shields.io/badge/Deploy%20(R2)-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://deploy.workers.cloudflare.com/?url=https://github.com/shuaiplus/NodeWarden)
+[![Deploy (KV)](https://img.shields.io/badge/Deploy%20(KV)-Cloudflare%20Workers-2ea44f?logo=cloudflare&logoColor=white)](#kv-mode-no-credit-card)
 [![Latest Release](https://img.shields.io/github/v/release/shuaiplus/NodeWarden?display_name=tag)](https://github.com/shuaiplus/NodeWarden/releases/latest)
 [![Sync Upstream](https://github.com/shuaiplus/NodeWarden/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/shuaiplus/NodeWarden/actions/workflows/sync-upstream.yml)
 
@@ -29,7 +30,7 @@
 | Web Vault (logins/notes/cards/identities) | ✅ | ✅ | Web-based vault management UI |
 | Folders / Favorites | ✅ | ✅ | Common vault organization supported |
 | Full sync `/api/sync` | ✅ | ✅ | Compatibility and performance optimized |
-| Attachment upload/download | ✅ | ✅ | Backed by Cloudflare R2 |
+| Attachment upload/download | ✅ | ✅ | Backed by Cloudflare R2 (or optional KV mode) |
 | mport / export | ✅ | ✅ | Fully implemented, including Bitwarden vault + attachments ZIP import. |
 | Website icon proxy | ✅ | ✅ | Via `/icons/{hostname}/icon.png` |
 | passkey、TOTP fields | ❌ | ✅ | Official service requires premium; NodeWarden does not |
@@ -59,14 +60,20 @@
 **Deploy steps:**
 
 1. Fork this repository and name it **NodeWarden**.
-2. Click the deploy button below, rename the project to **NodeWarden2**, and set **JWT_SECRET** to a 32-character random string.
-3. [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/shuaiplus/nodewarden)
-4. After deployment, open the Workers settings on the same page and disconnect the **Git repository**.
-5. From the same location, reconnect the **Git repository** to the fork you created in step 1.
+2. Click the one-click deploy button below, rename the project to **NodeWarden2**, set **JWT_SECRET** to a 32-character random string; if you **do not have a credit card**, **use KV mode** and change the deploy command to `npm run deploy:kv`.
 
-**Sync upstream (update):**
-- Manual: Open your forked repository on GitHub and click **Sync fork** when the sync prompt appears at the top.
-- Automatic: Go to your fork → Actions, click "I understand my workflows, go ahead and enable them". The repository will auto-sync with upstream every day at 3 AM.
+    [![Deploy to Cloudflare Workers (R2)](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/shuaiplus/nodewarden)
+
+3. After deployment, open the Workers settings on the same page and disconnect the **Git repository**.
+4. From the same location, reconnect the **Git repository** to the fork you created in step 1.
+
+> [!NOTE] R2 vs KV
+>- R2: typically requires a payment method; **single attachment/Send file limit is 100 MB** (**project-level limit, editable in code**); **10 GB free storage included**.
+>- KV: no card required; **single attachment/Send file limit is 25 MiB** (**Cloudflare platform limit, not editable**); **1 GB free storage included**.
+
+> [!TIP] Sync upstream (keep your fork updated):
+>- Manual: open your fork on GitHub and click **Sync fork** when prompted.
+>- Automatic: in your fork, go to **Actions**, click "I understand my workflows, go ahead and enable them". It will auto-sync from upstream daily at 3 AM.
 
 ### CLI deploy 
 
@@ -87,6 +94,11 @@ npx wrangler r2 bucket create nodewarden-attachments
 
 # Deploy
 npm run deploy 
+
+# (Optional) KV mode (no R2 / no credit card)
+npx wrangler kv namespace create ATTACHMENTS_KV
+# Put returned namespace id into wrangler.kv.toml -> [[kv_namespaces]].id
+npm run deploy:kv
 
 # To update later: re-clone and re-deploy — no need to recreate cloud resources
 git clone https://github.com/shuaiplus/NodeWarden.git

@@ -8,8 +8,10 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev -c wrangler.toml",
+    "dev:kv": "wrangler dev -c wrangler.kv.toml",
     "build": "vite build --config webapp/vite.config.ts",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "deploy:kv": "wrangler deploy -c wrangler.kv.toml"
   },
   "keywords": [
     "bitwarden",
@@ -28,6 +30,9 @@
       },
       "ATTACHMENTS": {
         "description": "R2 bucket for storing file attachments"
+      },
+      "ATTACHMENTS_KV": {
+        "description": "Optional KV namespace fallback for attachment/send-file storage"
       }
     }
   },

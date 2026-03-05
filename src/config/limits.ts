@@ -82,7 +82,7 @@
   send: {
     // Max file size allowed for Send file uploads.
     // Send 文件上传大小上限。
-    maxFileSizeBytes: 550_502_400,
+    maxFileSizeBytes: 100 * 1024 * 1024,
     // Max days allowed between now and deletion date.
     // 允许的最远删除日期（距当前天数）。
     maxDeletionDays: 31,

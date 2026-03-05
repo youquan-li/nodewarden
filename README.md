@@ -8,7 +8,8 @@
 
 [![Powered by Cloudflare](https://img.shields.io/badge/Powered%20by-Cloudflare-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![License: LGPL-3.0](https://img.shields.io/badge/License-LGPL--3.0-2ea44f)](./LICENSE)
-[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://deploy.workers.cloudflare.com/?url=https://github.com/shuaiplus/NodeWarden)
+[![Deploy (R2)](https://img.shields.io/badge/Deploy%20(R2)-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://deploy.workers.cloudflare.com/?url=https://github.com/shuaiplus/NodeWarden)
+[![Deploy (KV)](https://img.shields.io/badge/Deploy%20(KV)-Cloudflare%20Workers-2ea44f?logo=cloudflare&logoColor=white)](./README_EN.md#kv-mode-no-credit-card)
 [![Latest Release](https://img.shields.io/github/v/release/shuaiplus/NodeWarden?display_name=tag)](https://github.com/shuaiplus/NodeWarden/releases/latest)
 [![Sync Upstream](https://github.com/shuaiplus/NodeWarden/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/shuaiplus/NodeWarden/actions/workflows/sync-upstream.yml)
 
@@ -29,7 +30,7 @@ English：[`README_EN.md`](./README_EN.md)
 | Web Vault（登录/笔记/卡片/身份） | ✅ | ✅ | 网页端密码库管理页面 |
 | 文件夹 / 收藏 | ✅ | ✅ | 常用管理能力可用 |
 | 全量同步 `/api/sync` | ✅ | ✅ | 已做兼容与性能优化 |
-| 附件上传/下载 | ✅ | ✅ | 基于 Cloudflare R2 |
+| 附件上传/下载 | ✅ | ✅ | 基于 Cloudflare R2（或可选 KV 模式） |
 | 导入导出功能 | ✅ | ✅ | 完整实现，含 Bitwarden 密码库+附件 ZIP 导入 |
 | 网站图标代理 | ✅ | ✅ | 通过 `/icons/{hostname}/icon.png` |
 | passkey、TOTP字段 | ❌ | ✅ |官方需要会员，我们的不需要 |
@@ -58,14 +59,22 @@ English：[`README_EN.md`](./README_EN.md)
 **部署步骤：**
 
 1. 首先Fork本仓库，命名为**NodeWarden**
-2. 点击下面的一键部署按钮，修改项目名称为**NodeWarden2**，修改**JWT_SECRET**成32为随机字符串
-3. [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/shuaiplus/nodewarden)
-4. 部署完成后，同一页面打开workers设置，将**Git存储库**断开连接
-5. 同一位置，**Git存储库**链接至第一步Fork的仓库
+2. 点击下面的一键部署按钮，修改项目名称为**NodeWarden2**，修改**JWT_SECRET**成32为随机字符串；
+**若无信用卡，储存库可选KV模式**，一键部署页面里部署命令改成：npm run deploy:kv
 
-**同步上游（更新）：**
-- 手动：Github打开你Fork的私人仓库，看到顶部同步提示时，点击 “Sync fork”。
-- 自动：进入你的 Fork 仓库 → Actions，点击 “I understand my workflows, go ahead and enable them”，每天凌晨三点自动同步至上游
+    [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/shuaiplus/nodewarden)
+
+3. 部署完成后，同一页面打开workers设置，将**Git存储库**断开连接
+4. 同一位置，**Git存储库**链接至第一步Fork的仓库
+
+> [!NOTE] R2 vs KV
+>- R2：需绑定银行卡；**单个附件/Send上限 100MB**（代码限制，可自行修改）；**总量 10GB 免费**
+>- KV：无需绑卡；**单个附件/Send 文件上限 25 MiB**（cloudflare限制，不可修改）；**总量 1GB 免费**
+
+
+> [!TIP] 同步上游（更新仓库）：
+>- 手动：Github打开你Fork的私人仓库，看到顶部同步提示时，点击 “Sync fork”。
+>- 自动：进入你的 Fork 仓库 → Actions，点击 “I understand my workflows, go ahead and enable them”，每天凌晨三点自动同步至上游
 
 ### CLI 部署
 
@@ -86,6 +95,11 @@ npx wrangler r2 bucket create nodewarden-attachments
 
 # 部署
 npm run deploy 
+
+# （可选）KV 模式（无 R2 / 无信用卡）
+npx wrangler kv namespace create ATTACHMENTS_KV
+# 将返回的 namespace id 填入 wrangler.kv.toml 的 [[kv_namespaces]].id
+npm run deploy:kv
 
 # 需更新时重新拉取仓库，重新部署即可，无需创建云资源
 git clone https://github.com/shuaiplus/NodeWarden.git

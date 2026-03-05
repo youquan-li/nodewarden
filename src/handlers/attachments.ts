@@ -5,6 +5,13 @@ import { generateUUID } from '../utils/uuid';
 import { createFileDownloadToken, verifyFileDownloadToken } from '../utils/jwt';
 import { cipherToResponse } from './ciphers';
 import { LIMITS } from '../config/limits';
+import {
+  deleteBlobObject,
+  getAttachmentObjectKey,
+  getBlobObject,
+  getBlobStorageMaxBytes,
+  putBlobObject,
+} from '../services/blob-store';
 
 // Format file size to human readable
 function formatSize(bytes: number): string {
@@ -12,11 +19,6 @@ function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-// Get R2 object path for attachment
-function getAttachmentPath(cipherId: string, attachmentId: string): string {
-  return `${cipherId}/${attachmentId}`;
 }
 
 // POST /api/ciphers/{cipherId}/attachment/v2
@@ -86,9 +88,6 @@ export async function handleCreateAttachment(
   });
 }
 
-// Maximum file size: 100MB
-const MAX_FILE_SIZE = LIMITS.attachment.maxFileSizeBytes;
-
 // POST /api/ciphers/{cipherId}/attachment/{attachmentId}
 // Upload attachment file content
 export async function handleUploadAttachment(
@@ -99,6 +98,7 @@ export async function handleUploadAttachment(
   attachmentId: string
 ): Promise<Response> {
   const storage = new StorageService(env.DB);
+  const maxFileSize = getBlobStorageMaxBytes(env, LIMITS.attachment.maxFileSizeBytes);
 
   // Verify cipher exists and belongs to user
   const cipher = await storage.getCipher(cipherId);
@@ -114,8 +114,8 @@ export async function handleUploadAttachment(
 
   // Check content-length header for size limit
   const contentLength = request.headers.get('content-length');
-  if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE) {
-    return errorResponse('File too large. Maximum size is 100MB', 413);
+  if (contentLength && parseInt(contentLength) > maxFileSize) {
+    return errorResponse(`File too large. Maximum size is ${Math.floor(maxFileSize / (1024 * 1024))}MB`, 413);
   }
 
   // Get the file from multipart form data
@@ -132,21 +132,27 @@ export async function handleUploadAttachment(
   }
 
   // Check actual file size
-  if (file.size > MAX_FILE_SIZE) {
-    return errorResponse('File too large. Maximum size is 100MB', 413);
+  if (file.size > maxFileSize) {
+    return errorResponse(`File too large. Maximum size is ${Math.floor(maxFileSize / (1024 * 1024))}MB`, 413);
   }
 
-  // Store file in R2
-  const path = getAttachmentPath(cipherId, attachmentId);
-  await env.ATTACHMENTS.put(path, file.stream(), {
-    httpMetadata: {
+  const path = getAttachmentObjectKey(cipherId, attachmentId);
+  try {
+    await putBlobObject(env, path, file.stream(), {
+      size: file.size,
       contentType: 'application/octet-stream',
-    },
-    customMetadata: {
-      cipherId: cipherId,
-      attachmentId: attachmentId,
-    },
-  });
+      customMetadata: {
+        cipherId,
+        attachmentId,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('KV object too large')) {
+      return errorResponse(`File too large. Maximum size is ${Math.floor(maxFileSize / (1024 * 1024))}MB`, 413);
+    }
+    return errorResponse('Attachment storage is not configured', 500);
+  }
 
   // Update attachment size if different
   const actualSize = file.size;
@@ -242,9 +248,8 @@ export async function handlePublicDownloadAttachment(
     return errorResponse('Attachment not found', 404);
   }
 
-  // Get file from R2
-  const path = getAttachmentPath(cipherId, attachmentId);
-  const object = await env.ATTACHMENTS.get(path);
+  const path = getAttachmentObjectKey(cipherId, attachmentId);
+  const object = await getBlobObject(env, path);
 
   if (!object) {
     return errorResponse('Attachment file not found', 404);
@@ -257,7 +262,7 @@ export async function handlePublicDownloadAttachment(
 
   return new Response(object.body, {
     headers: {
-      'Content-Type': 'application/octet-stream',
+      'Content-Type': object.contentType || 'application/octet-stream',
       'Content-Length': String(object.size),
       'Cache-Control': 'private, no-cache',
     },
@@ -287,9 +292,8 @@ export async function handleDeleteAttachment(
     return errorResponse('Attachment not found', 404);
   }
 
-  // Delete file from R2
-  const path = getAttachmentPath(cipherId, attachmentId);
-  await env.ATTACHMENTS.delete(path);
+  const path = getAttachmentObjectKey(cipherId, attachmentId);
+  await deleteBlobObject(env, path);
 
   // Delete attachment metadata
   await storage.deleteAttachment(attachmentId);
@@ -318,8 +322,8 @@ export async function deleteAllAttachmentsForCipher(
   const attachments = await storage.getAttachmentsByCipher(cipherId);
 
   for (const attachment of attachments) {
-    const path = getAttachmentPath(cipherId, attachment.id);
-    await env.ATTACHMENTS.delete(path);
+    const path = getAttachmentObjectKey(cipherId, attachment.id);
+    await deleteBlobObject(env, path);
     await storage.deleteAttachment(attachment.id);
   }
 }

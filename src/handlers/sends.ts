@@ -11,6 +11,13 @@ import {
   verifySendAccessToken,
   verifySendFileDownloadToken,
 } from '../utils/jwt';
+import {
+  deleteBlobObject,
+  getBlobObject,
+  getBlobStorageMaxBytes,
+  getSendFileObjectKey,
+  putBlobObject,
+} from '../services/blob-store';
 
 const SEND_INACCESSIBLE_MSG = 'Send does not exist or is no longer available';
 const SEND_PASSWORD_ITERATIONS = 100_000;
@@ -140,10 +147,6 @@ function normalizeSendDataSizeField(data: Record<string, unknown>): Record<strin
     normalized.size = String(Math.trunc(normalized.size));
   }
   return normalized;
-}
-
-function getSendFilePath(sendId: string, fileId: string): string {
-  return `sends/${sendId}/${fileId}`;
 }
 
 export function isSendAvailable(send: Send): boolean {
@@ -609,6 +612,7 @@ export async function handleCreateSend(request: Request, env: Env, userId: strin
 // POST /api/sends/file/v2
 export async function handleCreateFileSendV2(request: Request, env: Env, userId: string): Promise<Response> {
   const storage = new StorageService(env.DB);
+  const maxFileSize = getBlobStorageMaxBytes(env, LIMITS.send.maxFileSizeBytes);
 
   let body: unknown;
   try {
@@ -626,7 +630,7 @@ export async function handleCreateFileSendV2(request: Request, env: Env, userId:
   const fileLengthRaw = getAliasedProp(body, ['fileLength', 'FileLength']);
   const fileLengthParsed = parseFileLength(fileLengthRaw.value);
   if (!fileLengthParsed.ok) return fileLengthParsed.response;
-  if (fileLengthParsed.value > LIMITS.send.maxFileSizeBytes) {
+  if (fileLengthParsed.value > maxFileSize) {
     return errorResponse('Send storage limit exceeded with this file', 400);
   }
 
@@ -774,6 +778,7 @@ export async function handleUploadSendFile(
   fileId: string
 ): Promise<Response> {
   const storage = new StorageService(env.DB);
+  const maxFileSize = getBlobStorageMaxBytes(env, LIMITS.send.maxFileSizeBytes);
   const send = await storage.getSend(sendId);
   if (!send || send.userId !== userId) {
     return errorResponse('Send not found. Unable to save the file.', 404);
@@ -799,7 +804,7 @@ export async function handleUploadSendFile(
     return errorResponse('No file uploaded', 400);
   }
 
-  if (file.size > LIMITS.send.maxFileSizeBytes) {
+  if (file.size > maxFileSize) {
     return errorResponse('Send storage limit exceeded with this file', 413);
   }
 
@@ -813,15 +818,22 @@ export async function handleUploadSendFile(
     return errorResponse('Send file size does not match.', 400);
   }
 
-  await env.ATTACHMENTS.put(getSendFilePath(sendId, fileId), file.stream(), {
-    httpMetadata: {
+  try {
+    await putBlobObject(env, getSendFileObjectKey(sendId, fileId), file.stream(), {
+      size: file.size,
       contentType: 'application/octet-stream',
-    },
-    customMetadata: {
-      sendId,
-      fileId,
-    },
-  });
+      customMetadata: {
+        sendId,
+        fileId,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('KV object too large')) {
+      return errorResponse('Send storage limit exceeded with this file', 413);
+    }
+    return errorResponse('Attachment storage is not configured', 500);
+  }
 
   await storage.updateRevisionDate(userId);
 
@@ -987,7 +999,7 @@ export async function handleDeleteSend(request: Request, env: Env, userId: strin
     const data = parseStoredSendData(send);
     const fileId = typeof data.id === 'string' ? data.id : null;
     if (fileId) {
-      await env.ATTACHMENTS.delete(getSendFilePath(send.id, fileId));
+      await deleteBlobObject(env, getSendFileObjectKey(send.id, fileId));
     }
   }
 
@@ -1282,7 +1294,7 @@ export async function handleDownloadSendFile(
   }
 
   const storage = new StorageService(env.DB);
-  const object = await env.ATTACHMENTS.get(getSendFilePath(sendId, fileId));
+  const object = await getBlobObject(env, getSendFileObjectKey(sendId, fileId));
   if (!object) {
     return errorResponse('Send file not found', 404);
   }
@@ -1296,7 +1308,7 @@ export async function handleDownloadSendFile(
 
   return new Response(object.body, {
     headers: {
-      'Content-Type': 'application/octet-stream',
+      'Content-Type': object.contentType || 'application/octet-stream',
       'Content-Length': String(object.size),
       'Cache-Control': 'private, no-cache',
     },
